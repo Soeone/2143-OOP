@@ -13,7 +13,13 @@
  *
  */
 #include <SDL.h>
-
+#include <cstdlib>
+#include <climits>
+#include <ctime>
+#include <cstddef>
+#include <iomanip>
+#include <vector>
+#include <string>
 #include "./includes/argsToJson.hpp"
 #include "./includes/json.hpp"
 #include <fstream>
@@ -25,21 +31,106 @@ using namespace std;
 int main(int argc, char* argv[]) {
     json params = ArgsToJson(argc, argv);
     cout << params.dump(4) << endl;
+    
+    struct Cell {
+        int x;
+        int y;
+    };
+
+    // A shape that consists of a name, dimensions, and a list of live cells
+    struct Shape {
+        string name;
+        int width;
+        int height;
+        vector<Cell> cells;
+    };
+
+    ifstream file("./includes/shapes.json");
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open shapes.json\n";
+        return 1;
+    }
+
+    json data;
+    try {
+        file >> data;
+    } catch (const std::exception& e) {
+        std::cerr << "JSON parse error: " << e.what() << "\n";
+        return 1;
+    }
+
+    if (!data.contains("shapes")) {
+        std::cerr << "Error: JSON missing 'shapes' key\n";
+        return 1;
+    }
+
+   
+    auto shapes_data = data["shapes"];
+    std::cout << "Available shapes:\n";
+    for (auto it = shapes_data.begin(); it != shapes_data.end(); ++it)
+        std::cout << " - " << it.key() << '\n';
+
+    string choice;
+    cout << "\nTotal shapes loaded: " << shapes_data.size() << "\n";
+    cout << "Enter shape name: ";
+    cin >> choice;
+
+    if (!shapes_data.contains(choice)) {
+        std::cerr << "Shape not found.\n";
+        return 1;
+    }
+
+    auto shape_json = shapes_data[choice];
+
+    Shape shape;
+    shape.name = choice;
+    shape.width = shape_json["size"]["w"];
+    shape.height = shape_json["size"]["h"];
+
+    for (auto& cell : shape_json["cells"]) {
+        shape.cells.push_back({cell["x"], cell["y"]});
+    }
+
+    
 
     // ------------------------------------------------------------
     // CONFIGURATION SECTION
     // ------------------------------------------------------------
     // Each "cell" will be a square this many pixels wide/tall
-    const int cellSize = params["cell_size"];
+    const int cellSize = params.contains("cell_size") ? (int)params["cell_size"] : 20;
 
     // // Number of cells horizontally and vertically
     // const int gridWidth  = 30;  // 30 cells across
     // const int gridHeight = 20;  // 20 cells tall
 
-    // Total pixel dimensions of the SDL window
-    const int windowWidth  = params["width"];
-    const int windowHeight = params["height"];
+    // Total pixel dimensions 
+    const int windowWidth  = params.contains("width") ? (int)params["width"] : 600;
+    const int windowHeight = params.contains("height") ? (int)params["height"] : 400;
 
+    // Grid dimensions 
+    const int gridWidth = windowWidth / cellSize;
+    const int gridHeight = windowHeight / cellSize;
+
+    // Calculates center offset for the shapes
+    int minX = shape.cells[0].x;
+    int maxX = shape.cells[0].x;
+    int minY = shape.cells[0].y;
+    int maxY = shape.cells[0].y;
+
+    // Loop through all cells to find the min and max x and y values
+    for (const auto& cell : shape.cells) {
+        minX = min(minX, cell.x);
+        maxX = max(maxX, cell.x);
+        minY = min(minY, cell.y);
+        maxY = max(maxY, cell.y);
+    }
+
+
+    // Calculate the width and height of the box of the shapes
+    int patternWidth = maxX - minX + 1;
+    int patternHeight = maxY - minY + 1;
+    int offsetX = (gridWidth - patternWidth) / 2 - minX;
+    int offsetY = (gridHeight - patternHeight) / 2 - minY;
     // ------------------------------------------------------------
     // INITIALIZE SDL
     // ------------------------------------------------------------
@@ -94,9 +185,6 @@ int main(int argc, char* argv[]) {
     bool running = true;
     SDL_Event event;  // Struct that holds event information (keyboard, mouse, quit, etc.)
 
-    ifstream f("./includes/shapes.json");
-    json data = json::parse(f);
-
     while (running) {
         // --------------------------------------------------------
         // EVENT HANDLING
@@ -106,6 +194,10 @@ int main(int argc, char* argv[]) {
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT)  // Window close event
                 running = false;         // Exit the main loop
+            
+            // Check for ESC key press
+            if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)
+                running = false;         // Exit when ESC is pressed
         }
 
         // --------------------------------------------------------
@@ -132,6 +224,25 @@ int main(int argc, char* argv[]) {
         // Start at y = 0 and go to windowHeight, stepping by cellSize each time.
         for (int y = 0; y <= windowHeight; y += cellSize) {
             SDL_RenderDrawLine(renderer, 0, y, windowWidth, y);
+        }
+
+        
+        // Sets color for the shapes
+        srand(time(0));
+        int r = rand() % 256;
+        int g = rand() % 256;
+        int b = rand() % 256;
+        SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+        
+        // Draw each cell from the selected shape
+        for (const auto& cell : shape.cells) {
+            SDL_Rect cellRect;
+            cellRect.x = (cell.x + offsetX) * cellSize;
+            cellRect.y = (cell.y + offsetY) * cellSize;
+            cellRect.w = cellSize;
+            cellRect.h = cellSize;
+            
+            SDL_RenderFillRect(renderer, &cellRect);
         }
 
         // --------------------------------------------------------
