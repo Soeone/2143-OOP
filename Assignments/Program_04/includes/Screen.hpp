@@ -1,6 +1,5 @@
 #pragma once
-#include "CellularAutomaton.h"
-#include "Screen.h"
+#include "CellularAutomaton.hpp"
 #include <chrono>
 #include <memory>
 #include <thread>
@@ -60,55 +59,91 @@ class Screen {
 //
 // Implementations of render() and pause() live in TextScreen.cpp
 // --------------------------------------------------------------
-class TextScreen : public Screen {
+
+// --------------------------------------------------------------
+// SdlScreen:
+// --------------------------------------------------------------
+// Renders the automaton using SDL2 in a graphical window
+// --------------------------------------------------------------
+class SdlScreen : public Screen {
+   private:
+    SDL_Window* window;
+    SDL_Renderer* renderer;
+    int cellSize;
+    int windowWidth;
+    int windowHeight;
+
    public:
-    void render(const std::vector<std::vector<int>>& grid) const override;
-    void pause(int ms) const override;
-};
-
-// --------------------------------------------------------------
-// TextScreen::render()
-// --------------------------------------------------------------
-// Purpose:
-//   Render a 2D grid of integers as simple text/emoji graphics.
-//   - 1 = live cell  → shown as "⬜"
-//   - 0 = dead cell  → shown as two spaces
-//
-// Behavior:
-//   - Clears the terminal each frame (Linux: "clear", Windows: "cls")
-//   - Prints each row, then flushes stdout so animation is smooth
-//
-// Notes for students:
-//   - This is not performance-optimized; it's meant for clarity.
-//   - Rendering via the terminal is simple but slow, which they
-//     will notice once grids get large.
-// --------------------------------------------------------------
-void TextScreen::render(const std::vector<std::vector<int>>& grid) const {
-#if defined(_WIN32)
-    system("cls");  // Windows terminal clear
-#else
-    system("clear");  // Linux/macOS terminal clear
-#endif
-
-    for (const auto& row : grid) {
-        for (int cell : row) {
-            std::cout << (cell ? "⬜" : "  ");
+    // Constructor: creates SDL window and renderer
+    SdlScreen(int width, int height, int cellSz = 10) 
+        : cellSize(cellSz), windowWidth(width), windowHeight(height) 
+    {
+        // Initialize SDL2
+        if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+            throw std::runtime_error("SDL initialization failed");
         }
-        std::cout << "\n";
+
+        window = SDL_CreateWindow(
+            "Conway's Game of Life",
+            SDL_WINDOWPOS_CENTERED,
+            SDL_WINDOWPOS_CENTERED,
+            width,
+            height,
+            SDL_WINDOW_SHOWN
+        );
+
+
+        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+
     }
 
-    std::cout.flush();  // Force immediate screen output
-}
+    // Render the grid
+    void render(const std::vector<std::vector<int>>& grid) const override {
+        // Clear screen (black background)
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
 
-// --------------------------------------------------------------
-// TextScreen::pause()
-// --------------------------------------------------------------
-// Purpose:
-//   Pause the simulation for a given number of milliseconds.
-//   Useful for animation pacing.
-//
-// Uses C++ chrono + thread sleep.
-// --------------------------------------------------------------
-void TextScreen::pause(int ms) const {
-    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-}
+        // Draw live cells (white)
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        
+        for (size_t row = 0; row < grid.size(); ++row) {
+            for (size_t col = 0; col < grid[row].size(); ++col) {
+                if (grid[row][col] == 1) {  // Live cell
+                    SDL_Rect rect;
+                    rect.x = col * cellSize;
+                    rect.y = row * cellSize;
+                    rect.w = cellSize;
+                    rect.h = cellSize;
+                   if (grid[row][col] == 1) 
+                    {
+                     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);  // White for alive
+                    } 
+                    else 
+                    {
+                     SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);     // Dark gray for dead
+                    }
+                    SDL_RenderFillRect(renderer, &rect);
+                }
+            }
+        }
+
+        SDL_RenderPresent(renderer);
+    }
+
+    void pause(int ms) const override {
+        SDL_Delay(ms);
+        
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                exit(0);
+            }
+        }
+    }
+
+    ~SdlScreen() override {
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+    }
+};

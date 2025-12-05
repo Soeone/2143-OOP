@@ -1,5 +1,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>  // For STDOUT_FILENO
+#include <iostream>
+#include <SDL2/SDL.h>
 
 // Project headers
 #include "./includes/AutomatonUtils.hpp"
@@ -7,6 +9,8 @@
 #include "./includes/Screen.hpp"
 #include "./includes/argsToJson.hpp"
 #include "./includes/json.hpp"
+#include "./includes/CellularAutomaton.hpp"
+#include "./includes/Click.hpp"
 
 using namespace std;
 using nlohmann::json;
@@ -19,13 +23,8 @@ using nlohmann::json;
 json defaults = {{"width", 800}, {"height", 600}, {"generations", 1000}, {"cellSize", 10}, {"frameDelayMs", 500}};
 
 int main(int argc, char* argv[]) {
-    // ----------------------------------------------------------
-    // Parse command-line arguments into a JSON object.
-    // ArgsToJson expects arguments like:
-    //     width=500 height=300 frameDelayMs=20
-    //
-    // This keeps your parameter-handling clean and extensible.
-    // ----------------------------------------------------------
+
+     
     json params = ArgsToJson(argc, argv);
 
     // ----------------------------------------------------------
@@ -66,7 +65,7 @@ int main(int argc, char* argv[]) {
     // TextScreen implements the Screen interface using simple
     // Unicode/ASCII-based rendering in the terminal.
     // ----------------------------------------------------------
-    TextScreen txtscr;
+   SdlScreen screen(params["width"], params["height"], params["cellSize"]);
 
     // ----------------------------------------------------------
     // Construct a ConwayLife automaton based on available space.
@@ -88,10 +87,32 @@ int main(int argc, char* argv[]) {
     //
     // ctrl-C exits.
     // ----------------------------------------------------------
-    while (1) {
-        txtscr.render(gol.getGrid());
+    Click click;
+    bool running = true;
+
+    while (running) {
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            click.handleEvent(e);
+            
+            if (e.type == SDL_QUIT) {
+                running = false;
+            }
+        }
+
+        if (click.leftClicked()) {
+            std::cout << "Clicked at: "
+                      << click.x() << ", " << click.y() << "\n";
+        }
+
+        SDL_Rect button{ 100, 100, 200, 100 };
+        if (click.leftClicked() && click.inside(button)) {
+            std::cout << "Button pressed!\n";
+        }
+
+        screen.render(gol.getGrid());
         gol.step();
-        txtscr.pause(500);
+        screen.pause(500);
     }
 
     return 0;

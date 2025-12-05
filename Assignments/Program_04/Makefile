@@ -7,7 +7,7 @@ CXXFLAGS := -Wall -std=c++17 $(shell pkg-config --cflags sdl2 SDL2_ttf)
 LDFLAGS := $(shell pkg-config --libs sdl2 SDL2_ttf)
 
 TARGET := main
-SRC := main.cpp
+SRC := main.cpp src/Click.cpp
 
 # Default rule
 all: $(TARGET)
